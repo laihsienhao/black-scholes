@@ -55,3 +55,33 @@ class BlackScholes:
         if option_type == "call":
             return self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(self._d2()) / 100
         return -self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(-self._d2()) / 100
+
+
+# --- Implied Volatility ---
+
+def implied_vol(market_price, S, K, T, r, option_type="call", tol=1e-6, max_iter=200):
+    sigma = 0.2
+    for _ in range(max_iter):
+        bs    = BlackScholes(S, K, T, r, sigma)
+        price = bs.call_price() if option_type == "call" else bs.put_price()
+        vega  = bs.vega() * 100          # undo /100 scaling → ∂price/∂σ
+        diff  = price - market_price
+        if abs(diff) < tol:
+            return sigma
+        if abs(vega) < 1e-10:
+            break                        # NR unstable, fall through to bisection
+        sigma -= diff / vega
+        sigma  = max(1e-4, min(sigma, 10.0))
+    # bisection fallback
+    lo, hi = 1e-4, 10.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        bs  = BlackScholes(S, K, T, r, mid)
+        p   = bs.call_price() if option_type == "call" else bs.put_price()
+        if abs(p - market_price) < tol:
+            return mid
+        if p < market_price:
+            lo = mid
+        else:
+            hi = mid
+    return None
